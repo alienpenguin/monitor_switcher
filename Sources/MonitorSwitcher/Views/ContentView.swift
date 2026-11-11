@@ -4,11 +4,13 @@ public struct ContentView: View {
     @StateObject private var displayManager: DisplayManager
     @StateObject private var accessibilityManager: AccessibilityManager
     @StateObject private var windowManager: WindowManager
+    @ObservedObject private var hotKeyManager = HotKeyManager.shared
 
     @State private var searchText: String = ""
     @State private var selectedStrategy: MoveStrategy = .smartCenter
     @State private var bringToFront: Bool = true
     @State private var targetScrollMonitorId: CGDirectDisplayID? = nil
+    @State private var showingHotkeyPopover: Bool = false
 
     public init() {
         let disp = DisplayManager()
@@ -30,7 +32,7 @@ public struct ContentView: View {
             // Accessibility permission reminder if untrusted
             if !accessibilityManager.isTrusted {
                 PermissionBannerView(accessibilityManager: accessibilityManager)
-                    .padding(.top, 12)
+                    .padding(.top, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
@@ -68,16 +70,21 @@ public struct ContentView: View {
                 Divider()
             }
 
-            // Main Content Area: Side-by-Side Monitor Columns
+            // Main Content Area: Fully Responsive Side-by-Side Monitor Columns
             mainMonitorColumns
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
             // Bottom Status Bar
             statusBar
         }
-        .frame(minWidth: 780, minHeight: 520)
+        .frame(minWidth: 700, minHeight: 460)
+        .background(WindowAccessor { window in
+            AppWindowManager.shared.attachWindow(window)
+        })
         .onAppear {
+            AppWindowManager.shared.configure(displayManager: displayManager, windowManager: windowManager)
             windowManager.refreshWindows()
         }
         .onChange(of: accessibilityManager.isTrusted) { isTrusted in
@@ -90,28 +97,28 @@ public struct ContentView: View {
     // MARK: - Subviews
 
     private var toolbarHeader: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // App Branding
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "rectangle.2.swap")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.accentColor)
 
                 Text("Monitor Switcher")
                     .font(.headline)
             }
 
-            Spacer()
+            Spacer(minLength: 6)
 
             // Search Filter
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
 
-                TextField("Filter apps or windows...", text: $searchText)
+                TextField("Filter apps or titles...", text: $searchText)
                     .textFieldStyle(.plain)
-                    .frame(width: 170)
+                    .frame(width: 150)
 
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
@@ -122,8 +129,8 @@ public struct ContentView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color(NSColor.controlBackgroundColor))
@@ -152,50 +159,80 @@ public struct ContentView: View {
                     Image(systemName: selectedStrategy.iconName)
                     Text(selectedStrategy.rawValue)
                 }
-                .font(.system(size: 12))
+                .font(.system(size: 11))
             }
             .menuStyle(.borderedButton)
+            .controlSize(.small)
             .help("Default placement strategy when moving windows")
 
             // Bring to Front Toggle
             Toggle(isOn: $bringToFront) {
                 Text("Focus Window")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
             }
             .toggleStyle(.checkbox)
             .help("Activate and bring the window to the front after moving")
+
+            // Global Hotkey Popover Button
+            Button(action: {
+                showingHotkeyPopover.toggle()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "keyboard")
+                    Text(hotKeyManager.currentCombination.displayString)
+                }
+                .font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .popover(isPresented: $showingHotkeyPopover, arrowEdge: .bottom) {
+                HotkeySettingsView()
+            }
+            .help("Configure global hotkey to show/hide app")
 
             // Refresh Button
             Button(action: {
                 windowManager.refreshWindows()
             }) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
             }
             .buttonStyle(.bordered)
+            .controlSize(.small)
             .help("Refresh monitors and windows (Cmd+R)")
             .keyboardShortcut("r", modifiers: .command)
 
+            // Hide to Tray Button
+            Button(action: {
+                AppWindowManager.shared.hideWindow()
+            }) {
+                Image(systemName: "menubar.arrow.up.rectangle")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Hide to menu bar tray")
+
             // Permission status indicator
             if accessibilityManager.isTrusted {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 8, height: 8)
+                        .frame(width: 7, height: 7)
                     Text("Ready")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                .help("Accessibility permission is granted")
+                .help("Accessibility permission is active")
             } else {
                 Button(action: {
                     accessibilityManager.promptForPermission()
                 }) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Circle()
                             .fill(Color.orange)
-                            .frame(width: 8, height: 8)
-                        Text("Permission Needed")
+                            .frame(width: 7, height: 7)
+                        Text("Permission")
                             .font(.caption2)
                             .foregroundColor(.orange)
                     }
@@ -203,8 +240,8 @@ public struct ContentView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .background(Color(NSColor.windowBackgroundColor))
     }
 
@@ -223,55 +260,70 @@ public struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(alignment: .top, spacing: 14) {
-                            ForEach(displayManager.monitors) { monitor in
-                                let wins = windowManager.windows.filter { $0.monitorId == monitor.id }
-                                MonitorView(
-                                    monitor: monitor,
-                                    allMonitors: displayManager.monitors,
-                                    windows: wins,
-                                    searchText: searchText,
-                                    defaultStrategy: selectedStrategy,
-                                    bringToFront: bringToFront,
-                                    onMoveWindow: { win, target, strat in
-                                        Task {
-                                            _ = await windowManager.move(
-                                                window: win,
-                                                to: target,
-                                                strategy: strat,
-                                                bringToFront: bringToFront
-                                            )
+                GeometryReader { geo in
+                    let monitorCount = CGFloat(displayManager.monitors.count)
+                    let horizontalPadding: CGFloat = 12
+                    let spacing: CGFloat = 12
+                    let totalSpacing = spacing * max(0, monitorCount - 1)
+                    let availableWidth = geo.size.width - (horizontalPadding * 2) - totalSpacing
+                    let naturalWidthPerColumn = availableWidth / max(1, monitorCount)
+                    let minColWidth: CGFloat = 340
+                    let columnWidth = max(minColWidth, naturalWidthPerColumn)
+                    let availableHeight = max(200, geo.size.height - 24)
+                    let needsHorizontalScroll = naturalWidthPerColumn < minColWidth
+
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: needsHorizontalScroll) {
+                            HStack(alignment: .top, spacing: spacing) {
+                                ForEach(displayManager.monitors) { monitor in
+                                    let wins = windowManager.windows.filter { $0.monitorId == monitor.id }
+                                    MonitorView(
+                                        monitor: monitor,
+                                        allMonitors: displayManager.monitors,
+                                        windows: wins,
+                                        searchText: searchText,
+                                        defaultStrategy: selectedStrategy,
+                                        bringToFront: bringToFront,
+                                        onMoveWindow: { win, target, strat in
+                                            Task {
+                                                _ = await windowManager.move(
+                                                    window: win,
+                                                    to: target,
+                                                    strategy: strat,
+                                                    bringToFront: bringToFront
+                                                )
+                                            }
+                                        },
+                                        onMoveAll: { src, target, strat in
+                                            Task {
+                                                await windowManager.moveAll(
+                                                    from: src,
+                                                    to: target,
+                                                    strategy: strat
+                                                )
+                                            }
+                                        },
+                                        onFocusWindow: { win in
+                                            if let ax = win.axElement {
+                                                AXUIElementPerformAction(ax, kAXRaiseAction as CFString)
+                                            }
+                                            NSRunningApplication(processIdentifier: win.pid)?.activate(options: .activateIgnoringOtherApps)
                                         }
-                                    },
-                                    onMoveAll: { src, target, strat in
-                                        Task {
-                                            await windowManager.moveAll(
-                                                from: src,
-                                                to: target,
-                                                strategy: strat
-                                            )
-                                        }
-                                    },
-                                    onFocusWindow: { win in
-                                        if let ax = win.axElement {
-                                            AXUIElementPerformAction(ax, kAXRaiseAction as CFString)
-                                        }
-                                        NSRunningApplication(processIdentifier: win.pid)?.activate(options: .activateIgnoringOtherApps)
-                                    }
-                                )
-                                .id(monitor.id)
+                                    )
+                                    .frame(width: columnWidth, height: availableHeight)
+                                    .id(monitor.id)
+                                }
                             }
+                            .padding(.horizontal, horizontalPadding)
+                            .padding(.vertical, 12)
                         }
-                        .padding(14)
-                    }
-                    .onChange(of: targetScrollMonitorId) { targetId in
-                        if let id = targetId {
-                            withAnimation {
-                                proxy.scrollTo(id, anchor: .center)
+                        .onChange(of: targetScrollMonitorId) { targetId in
+                            if let id = targetId {
+                                withAnimation {
+                                    proxy.scrollTo(id, anchor: .center)
+                                }
+                                targetScrollMonitorId = nil
                             }
-                            targetScrollMonitorId = nil
                         }
                     }
                 }
@@ -284,7 +336,7 @@ public struct ContentView: View {
             let totalWindows = windowManager.windows.count
             let totalMonitors = displayManager.monitors.count
 
-            Text("\(totalWindows) open window\(totalWindows == 1 ? "" : "s") across \(totalMonitors) display\(totalMonitors == 1 ? "" : "s")")
+            Text("\(totalWindows) window\(totalWindows == 1 ? "" : "s") across \(totalMonitors) display\(totalMonitors == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -295,12 +347,12 @@ public struct ContentView: View {
                     .controlSize(.small)
             }
 
-            Text("Tip: Press Cmd+R to refresh windows")
+            Text("Toggle Shortcut: \(hotKeyManager.currentCombination.displayString)")
                 .font(.caption2)
-                .foregroundColor(.secondary.opacity(0.8))
+                .foregroundColor(.secondary.opacity(0.85))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        .background(Color(NSColor.windowBackgroundColor).opacity(0.6))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.7))
     }
 }

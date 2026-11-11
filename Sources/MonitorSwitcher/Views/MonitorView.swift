@@ -42,32 +42,33 @@ public struct MonitorView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             // Monitor Header
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: monitor.isMain ? "laptopcomputer" : "display")
-                        .font(.system(size: 16))
+                        .font(.system(size: 15))
                         .foregroundColor(monitor.isMain ? .blue : .purple)
 
                     Text(monitor.name)
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .bold))
                         .lineLimit(1)
+                        .truncationMode(.tail)
 
                     if monitor.isMain {
                         Text("Main")
                             .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
                             .background(Capsule().fill(Color.blue.opacity(0.15)))
                             .foregroundColor(.blue)
                     }
 
-                    Spacer()
+                    Spacer(minLength: 4)
 
                     Text("\(windows.count)")
                         .font(.system(size: 11, weight: .bold))
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 7)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(Color.secondary.opacity(0.2)))
                         .foregroundColor(.primary)
@@ -105,26 +106,26 @@ public struct MonitorView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
 
             Divider()
 
-            // Window items
+            // Window items with responsive scrolling & visible scrollbars
             if filteredWindows.isEmpty {
                 VStack(spacing: 12) {
-                    Spacer(minLength: 40)
+                    Spacer()
                     Image(systemName: "macwindow.badge.plus")
-                        .font(.system(size: 32))
+                        .font(.system(size: 30))
                         .foregroundColor(.secondary.opacity(0.4))
 
                     Text(searchText.isEmpty ? "No windows on this display" : "No matching windows")
                         .font(.callout)
                         .foregroundColor(.secondary)
-                    Spacer(minLength: 40)
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(spacing: 8) {
                         ForEach(filteredWindows) { win in
                             WindowRowView(
@@ -138,12 +139,13 @@ public struct MonitorView: View {
                             )
                         }
                     }
+                    .padding(.trailing, 2)
                     .padding(.vertical, 2)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(14)
-        .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(NSColor.windowBackgroundColor))
