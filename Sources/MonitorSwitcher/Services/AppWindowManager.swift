@@ -24,59 +24,79 @@ public final class AppWindowManager: NSObject, ObservableObject, NSWindowDelegat
 
     /// Attaches the main application window
     public func attachWindow(_ window: NSWindow) {
+        if self.mainWindow === window { return }
         self.mainWindow = window
         window.delegate = self
         // Ensure standard window collection behavior
         window.collectionBehavior = [.managed, .participatesInCycle]
         self.isWindowVisible = window.isVisible
+
+        if window.isVisible {
+            NSApp.setActivationPolicy(.regular)
+        }
     }
 
     /// Toggle show / hide for the main window
     public func toggleWindow() {
+        resolveMainWindow()
         guard let window = mainWindow else {
-            // If window not yet captured, activate app
-            NSApp.activate(ignoringOtherApps: true)
+            showWindow()
             return
         }
 
         if window.isVisible && NSApp.isActive {
-            window.orderOut(nil)
-            isWindowVisible = false
+            hideWindow()
         } else {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            isWindowVisible = true
-            windowManager?.refreshWindows()
+            showWindow()
         }
     }
 
     public func showWindow() {
-        mainWindow?.makeKeyAndOrderFront(nil)
+        resolveMainWindow()
+        // Restore dock icon
+        NSApp.setActivationPolicy(.regular)
+        if let window = mainWindow {
+            window.makeKeyAndOrderFront(nil)
+        }
         NSApp.activate(ignoringOtherApps: true)
         isWindowVisible = true
         windowManager?.refreshWindows()
     }
 
     public func hideWindow() {
+        resolveMainWindow()
         mainWindow?.orderOut(nil)
         isWindowVisible = false
+        // Remove icon from Dock, leaving only the Menu Bar tray icon
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    private func resolveMainWindow() {
+        if mainWindow == nil {
+            for win in NSApp.windows {
+                if win.canBecomeKey && !win.className.contains("StatusBar") && !win.className.contains("Menu") {
+                    attachWindow(win)
+                    break
+                }
+            }
+        }
     }
 
     // MARK: - NSWindowDelegate
 
-    /// Intercept red close button to hide to tray instead of quitting
+    /// Intercept red close button to hide to tray and remove from Dock
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
-        isWindowVisible = false
+        hideWindow()
         return false
     }
 
     public func windowDidBecomeKey(_ notification: Notification) {
         isWindowVisible = true
+        NSApp.setActivationPolicy(.regular)
     }
 
     public func windowDidResignKey(_ notification: Notification) {
-        // Can optionally track focus
+        // Window lost key focus
     }
 
     // MARK: - Status Bar / Tray Icon
@@ -159,7 +179,7 @@ public final class AppWindowManager: NSObject, ObservableObject, NSWindowDelegat
             menu.addItem(NSMenuItem.separator())
         }
 
-        // Quit item
+        // Quit item (triggers confirmation prompt)
         let quitItem = NSMenuItem(
             title: "Quit Monitor Switcher",
             action: #selector(menuQuitClicked),
